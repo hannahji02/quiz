@@ -97,7 +97,6 @@
     font-size:34px;font-weight:800;color:#15212b;font-variant-numeric:tabular-nums;pointer-events:none;
   }
   .p-timer.over{color:#d64545}
-  .p-end{font-size:min(16vw,28vh);letter-spacing:-0.02em}
   .p-count{
     position:absolute;right:20px;bottom:calc(env(safe-area-inset-bottom,0px) + 16px);
     color:#b5b5b5;font-size:16px;font-variant-numeric:tabular-nums;pointer-events:none;
@@ -137,6 +136,9 @@
   }
   .hint{font-size:13px;color:var(--muted);padding:10px 4px 0;line-height:1.5}
   .seed{padding:20px 16px;text-align:center;line-height:1.6}
+  .seg{display:flex;gap:8px;padding:12px}
+  .seg button{flex:1;height:48px;border-radius:12px;border:1px solid var(--line);background:#fff;font-size:16px;font-weight:600}
+  .seg button.on{background:var(--accent);border-color:var(--accent);color:#fff}
 
   .toast{
     position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom,0px) + 24px);transform:translateX(-50%);
@@ -184,7 +186,7 @@ const SEED = [
 ];
 
 /* ---------- 상태 ---------- */
-const state = { folders: [], words: [] };
+const state = { folders: [], words: [], settings: {} };
 let mode = "local";          // local | remote
 let conn = "local";          // local | connecting | live | err
 let loaded = false;
@@ -253,6 +255,8 @@ const db = {
       sb.from("words").select("*")
     ]);
     state.folders = chk(f); state.words = chk(w);
+    const st = await sb.from("app_settings").select("*");
+    if (!st.error) state.settings = Object.fromEntries(st.data.map(r => [r.key, r.value]));
   },
   async insertFolders(rows) {
     if (mode === "local") { rows.forEach(r => state.folders.push({ created_at: now(), ...r })); return; }
@@ -284,6 +288,10 @@ const db = {
   async deleteWord(id) {
     if (mode === "local") { state.words = state.words.filter(w => w.id !== id); return; }
     chk(await sb.from("words").delete().eq("id", id));
+  },
+  async setSetting(key, value) {
+    if (mode === "local") { state.settings[key] = value; return; }
+    chk(await sb.from("app_settings").upsert({ key, value, updated_at: now() }));
   }
 };
 
@@ -392,7 +400,11 @@ function openFolder(id) {
 }
 
 /* 04 스피드 퀴즈: 최상위 폴더 이름에 "스피드 퀴즈"가 들어가면 3-2-1 카운트 + 1분 타이머 */
-const QUIZ_SECONDS = 60;
+const QUIZ_OPTIONS = [30, 40, 50, 60];
+function getQuizSeconds() {
+  const v = parseInt(state.settings.quiz_seconds, 10);
+  return QUIZ_OPTIONS.includes(v) ? v : 40;
+}
 let countTimer = null, clockTimer = null;
 function isSpeedQuiz(fid) {
   const p = pathTo(fid);
@@ -407,7 +419,7 @@ function startCountdown() {
     if (present.count <= 0) {
       clearInterval(countTimer); countTimer = null;
       present.phase = "run";
-      present.endAt = Date.now() + QUIZ_SECONDS * 1000;
+      present.endAt = Date.now() + getQuizSeconds() * 1000;
       startClock();
     }
     if (view === "present") renderPresent();
@@ -423,11 +435,7 @@ function updateClock() {
   const left = present.endAt - Date.now();
   el.textContent = fmtTime(left);
   el.classList.toggle("over", left <= 0);
-  if (left <= 0) {
-    clearInterval(clockTimer); clockTimer = null;
-    present.phase = "over";
-    if (view === "present") renderPresent();
-  }
+  if (left <= 0) { clearInterval(clockTimer); clockTimer = null; }
 }
 function startClock() {
   clearInterval(clockTimer);
@@ -444,13 +452,6 @@ function renderPresent() {
   const list = f ? wordsOf(f.id) : [];
   if (!f || !list.length) { closePresent(); return; }
   present.index = Math.min(Math.max(present.index, 0), list.length - 1);
-
-  if (present.phase === "over") {
-    app.replaceChildren(h("div", { class: "present counting", role: "dialog", "aria-label": f.name },
-      h("button", { class: "p-close", "aria-label": "닫기", onclick: closePresent }, "✕ 닫기"),
-      h("div", { class: "p-num p-end", "aria-live": "assertive" }, "시간 종료")));
-    return;
-  }
 
   if (present.phase === "count") {
     app.replaceChildren(h("div", { class: "present counting", role: "dialog", "aria-label": f.name },
@@ -513,7 +514,7 @@ function closePresent() {
 window.addEventListener("resize", () => { if (view === "present") renderPresent(); });
 document.addEventListener("keydown", e => {
   if (view !== "present") return;
-  if (present.phase === "count" || present.phase === "over") { if (e.key === "Escape") closePresent(); return; }
+  if (present.phase === "count") { if (e.key === "Escape") closePresent(); return; }
   if (e.key === "ArrowRight" || e.key === " " || e.key === "PageDown") { e.preventDefault(); step(1); }
   else if (e.key === "ArrowLeft" || e.key === "PageUp") { e.preventDefault(); step(-1); }
   else if (e.key === "Escape") closePresent();
@@ -571,6 +572,15 @@ function renderSettings() {
   );
 
   const parts = [h("div", { class: "conn " + (conn === "live" ? "live" : conn === "err" ? "err" : "") }, "● " + connLabel)];
+
+  if (!fid) {
+    const cur = getQuizSeconds();
+    parts.push(h("section", { class: "sec" },
+      h("h2", {}, "04 스피드 퀴즈 제한 시간"),
+      h("div", { class: "seg" }, QUIZ_OPTIONS.map(sec =>
+        h("button", { class: sec === cur ? "on" : null, "aria-pressed": String(sec === cur),
+          onclick: () => sec !== cur && act(() => db.setSetting("quiz_seconds", String(sec))) }, `${sec}초`)))));
+  }
 
   if (!fid && state.folders.length === 0 && loaded) {
     parts.push(h("section", { class: "sec" },
@@ -663,6 +673,7 @@ async function init() {
   sb.channel("sketchbook")
     .on("postgres_changes", { event: "*", schema: "public", table: "folders" }, scheduleRefresh)
     .on("postgres_changes", { event: "*", schema: "public", table: "words" }, scheduleRefresh)
+    .on("postgres_changes", { event: "*", schema: "public", table: "app_settings" }, scheduleRefresh)
     .subscribe(status => {
       conn = status === "SUBSCRIBED" ? "live" : (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") ? "err" : "connecting";
       if (status === "SUBSCRIBED") scheduleRefresh();

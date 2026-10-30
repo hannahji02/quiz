@@ -51,7 +51,7 @@
   .tile:active{background:#e3f0f9}
  .tile .ic{display:flex;justify-content:center;width:100%}
   .tile svg{width:min(220px,90%);height:auto;display:block}
-  .tile .name{font-size:26px;font-weight:800;text-align:center;word-break:keep-all;line-height:1.3;margin-top:6px}
+  .tile .name{font-size:26px;font-weight:800;text-align:center;word-break:keep-all;line-height:1.3;margin-top:6px;white-space:pre-line}
   .tile .meta{font-size:16px;color:var(--muted)}
   .empty{max-width:520px;margin:60px auto;padding:0 24px;text-align:center;color:var(--muted);line-height:1.6}
   .note{text-align:center;color:var(--muted);font-size:13px;padding:0 20px 28px}
@@ -362,7 +362,7 @@ function renderHome() {
     const meta = subN ? `폴더 ${subN}개` : `제시어 ${wN}개`;
     return h("button", { class: "tile", onclick: () => openFolder(f.id) },
      h("span", { class: "ic", html: ICON.folder }),
-      h("span", { class: "name" }, f.name),
+     h("span", { class: "name" }, f.name.replace(" (", "\n(")),
       h("span", { class: "meta" }, meta));
   }));
 

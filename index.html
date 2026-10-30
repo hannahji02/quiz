@@ -97,6 +97,12 @@
     font-size:34px;font-weight:800;color:#15212b;font-variant-numeric:tabular-nums;pointer-events:none;
   }
   .p-timer.over{color:#d64545}
+  .present.timeup::after{
+    content:"시간 종료";position:absolute;inset:0;z-index:3;
+    display:flex;align-items:center;justify-content:center;
+    background:#14284b;color:#fff;font-weight:900;font-size:min(16vw,28vh);
+  }
+  .present.timeup .p-close{z-index:4;color:rgba(255,255,255,.55)}
   .p-count{
     position:absolute;right:20px;bottom:calc(env(safe-area-inset-bottom,0px) + 16px);
     color:#b5b5b5;font-size:16px;font-variant-numeric:tabular-nums;pointer-events:none;
@@ -434,7 +440,8 @@ function updateClock() {
   if (!el || !present.endAt) return;
   const left = present.endAt - Date.now();
   el.textContent = fmtTime(left);
-  el.classList.toggle("over", left <= 0);
+ el.classList.toggle("over", left <= 0);
+  el.closest(".present").classList.toggle("timeup", left <= 0);
   if (left <= 0) { clearInterval(clockTimer); clockTimer = null; }
 }
 function startClock() {

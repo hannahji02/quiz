@@ -1,0 +1,595 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>WEST MT 제시어</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<style>
+  :root{
+    --bg:#f3f7fa; --ink:#15212b; --muted:#7b8894; --line:#dde5ec; --card:#ffffff;
+    --sky:#8fd0f7; --sky-dark:#5fb4ea; --accent:#1f7fc4; --danger:#d64545;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{
+    font-family:Pretendard,"Apple SD Gothic Neo","Noto Sans KR",sans-serif;
+    background:var(--bg);color:var(--ink);-webkit-text-size-adjust:100%;
+  }
+  button{font:inherit;color:inherit;cursor:pointer}
+  button:focus-visible,input:focus-visible,textarea:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+
+  /* 상단 바 */
+  .top{
+    position:sticky;top:0;z-index:5;background:var(--bg);
+    display:flex;align-items:center;gap:10px;
+    padding:calc(env(safe-area-inset-top,0px) + 14px) 20px 12px;
+  }
+  .crumbs{flex:1;min-width:0;display:flex;flex-wrap:wrap;align-items:center;gap:2px;font-size:19px;font-weight:700}
+  .crumb{background:none;border:0;padding:6px 6px;border-radius:8px;color:var(--muted)}
+  .crumb.cur{color:var(--ink);cursor:default}
+  .sep{color:#b7c2cc;font-weight:400}
+  .icon-btn{
+    flex:none;width:46px;height:46px;border-radius:14px;border:1px solid var(--line);
+    background:var(--card);display:grid;place-items:center;
+  }
+  .icon-btn svg{width:22px;height:22px}
+
+  /* 폴더 그리드 */
+  .grid{
+    display:grid;grid-template-columns:repeat(4,minmax(0,1fr));
+    gap:28px 20px;padding:20px 24px 48px;max-width:1040px;margin:0 auto;
+  }
+  .tile{
+    background:none;border:0;border-radius:18px;padding:14px 6px;
+    display:flex;flex-direction:column;align-items:center;gap:8px;
+  }
+  .tile:active{background:#e3f0f9}
+  .tile svg{width:min(124px,82%);height:auto;display:block}
+  .tile .name{font-size:17px;font-weight:700;text-align:center;word-break:keep-all;line-height:1.3}
+  .tile .meta{font-size:13px;color:var(--muted)}
+  .empty{max-width:520px;margin:60px auto;padding:0 24px;text-align:center;color:var(--muted);line-height:1.6}
+  .note{text-align:center;color:var(--muted);font-size:13px;padding:0 20px 28px}
+
+  @media (max-width:560px){
+    .grid{gap:18px 6px;padding:12px 10px 40px}
+    .tile .name{font-size:14px}
+    .tile .meta{font-size:12px}
+    .crumbs{font-size:16px}
+    .top{padding-left:12px;padding-right:12px}
+  }
+
+  /* 발표 모드 */
+  .present{
+    position:fixed;inset:0;z-index:50;background:#fff;color:#000;
+    touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;
+  }
+  .p-stage{
+    position:absolute;
+    top:calc(env(safe-area-inset-top,0px) + 9vh);bottom:calc(env(safe-area-inset-bottom,0px) + 9vh);
+    left:5vw;right:5vw;display:flex;align-items:center;justify-content:center;
+  }
+  .p-word{
+    width:100%;text-align:center;font-weight:900;line-height:1.15;letter-spacing:-0.02em;
+    word-break:keep-all;overflow-wrap:normal;
+  }
+  .p-close{
+    position:absolute;z-index:2;top:calc(env(safe-area-inset-top,0px) + 12px);left:12px;
+    border:0;background:none;color:#b5b5b5;font-size:15px;padding:10px 12px;border-radius:10px;
+  }
+  .p-path{
+    position:absolute;top:calc(env(safe-area-inset-top,0px) + 22px);left:0;right:0;
+    text-align:center;color:#c4c4c4;font-size:14px;pointer-events:none;
+  }
+  .p-count{
+    position:absolute;right:20px;bottom:calc(env(safe-area-inset-bottom,0px) + 16px);
+    color:#b5b5b5;font-size:16px;font-variant-numeric:tabular-nums;pointer-events:none;
+  }
+
+  /* 설정 */
+  .settings{max-width:760px;margin:0 auto;padding:4px 16px 60px}
+  .conn{font-size:13px;color:var(--muted);padding:0 4px}
+  .conn.live{color:#2c9a5a}
+  .conn.err{color:var(--danger)}
+  .sec{background:var(--card);border:1px solid var(--line);border-radius:16px;margin-top:16px;overflow:hidden}
+  .sec h2{margin:0;font-size:15px;font-weight:700;padding:14px 16px;border-bottom:1px solid var(--line)}
+  .row{display:flex;align-items:center;gap:6px;padding:8px 10px 8px 14px;border-bottom:1px solid var(--line)}
+  .row:last-child{border-bottom:0}
+  .row .num{width:26px;flex:none;color:var(--muted);font-size:13px;text-align:right;font-variant-numeric:tabular-nums}
+  .row input{
+    flex:1;min-width:0;font:inherit;font-size:16px;padding:10px 10px;
+    border:1px solid transparent;border-radius:10px;background:transparent;color:var(--ink);
+  }
+  .row input:focus{border-color:var(--line);background:#f8fbfd}
+  .mini{
+    flex:none;min-width:40px;height:40px;border-radius:10px;border:1px solid var(--line);
+    background:#fff;font-size:14px;padding:0 10px;
+  }
+  .mini:disabled{opacity:.3;cursor:default}
+  .mini.del{color:var(--danger)}
+  .mini.open{color:var(--accent);font-weight:600}
+  .add{display:flex;gap:8px;padding:12px;background:#f8fbfd;align-items:flex-end}
+  .add input,.add textarea{
+    flex:1;min-width:0;font:inherit;font-size:16px;padding:10px 12px;border:1px solid var(--line);
+    border-radius:10px;background:#fff;color:var(--ink);
+  }
+  .add textarea{min-height:84px;resize:vertical;line-height:1.5}
+  .btn{
+    flex:none;height:44px;padding:0 18px;border-radius:12px;border:0;
+    background:var(--accent);color:#fff;font-weight:700;
+  }
+  .hint{font-size:13px;color:var(--muted);padding:10px 4px 0;line-height:1.5}
+  .seed{padding:20px 16px;text-align:center;line-height:1.6}
+
+  .toast{
+    position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom,0px) + 24px);transform:translateX(-50%);
+    background:#15212b;color:#fff;padding:12px 18px;border-radius:12px;font-size:14px;z-index:100;
+    max-width:90vw;text-align:center;
+  }
+  @media (max-width:560px){
+    .mini{min-width:36px;height:38px;padding:0 8px}
+    .row{padding-left:8px}
+    .settings{padding:0 10px 60px}
+  }
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<script>
+/* =========================================================
+   Supabase 연결 정보 - 아래 두 값만 채우면 됩니다.
+   비워두면 로컬 미리보기 모드(저장 안 됨)로 동작합니다.
+   ========================================================= */
+const SUPABASE_URL = "";
+const SUPABASE_ANON_KEY = "";
+
+/* ---------- 기본 제시어 (설정 > 기본 제시어 넣기) ---------- */
+const SEED = [
+  { name: "04 스피드 퀴즈 (고요 속의 외침)", children: [
+    { name: "동물", words: ["기린","코끼리","호랑이","토끼","원숭이","강아지","고양이","펭귄","사자","하마","거북이","다람쥐","판다","오리","돼지","악어","낙타","얼룩말","고슴도치","캥거루"] },
+    { name: "음식", words: ["김밥","떡볶이","짜장면","피자","치킨","라면","비빔밥","삼겹살","햄버거","초밥","냉면","김치찌개","붕어빵","아이스크림","순대","만두","불고기","탕수육","감자튀김","호떡"] },
+    { name: "인물", words: ["유재석","손흥민","아이유","세종대왕","이순신","김연아","강호동","백종원","박지성","이효리","신동엽","마동석","송강호","페이커","아인슈타인","에디슨","스티브 잡스","마이클 잭슨","나폴레옹","장영실"] },
+    { name: "사물", words: ["우산","냉장고","휴대폰","안경","시계","가방","의자","칫솔","컴퓨터","선풍기","텔레비전","숟가락","베개","거울","자전거","연필","모자","신발","지우개","전자레인지"] },
+    { name: "스포츠", words: ["축구","야구","농구","배구","탁구","테니스","골프","수영","마라톤","태권도","씨름","스키","볼링","양궁","펜싱","아이스하키","피겨스케이팅","줄넘기","배드민턴","유도"] },
+    { name: "직업", words: ["의사","간호사","선생님","소방관","경찰관","요리사","가수","배우","택배기사","미용사","변호사","운동선수","조종사","승무원","농부","군인","기자","집배원","개발자","아나운서"] }
+  ]},
+  { name: "05 등 대고 그림", children: [
+    { name: "웨", words: ["하트","우산","눈사람"] },
+    { name: "스", words: ["별","안경","물고기"] },
+    { name: "트", words: ["사과","집","자동차"] }
+  ]},
+  { name: "06 릴레이 그림 (그림 끝말잇기)", children: [
+    { name: "웨", words: ["가","나","다","사","자","고","바","수","오","하"] },
+    { name: "스", words: ["마","아","소","도","부","기","시","주","모","우"] },
+    { name: "트", words: ["호","무","비","이","구","지","파","토","개","차"] }
+  ]}
+];
+
+/* ---------- 상태 ---------- */
+const state = { folders: [], words: [] };
+let mode = "local";          // local | remote
+let conn = "local";          // local | connecting | live | err
+let loaded = false;
+let view = "home";           // home | present | settings
+let homePath = null;         // 홈에서 보고 있는 폴더 id (null = 최상위)
+let settingsPath = null;     // 설정에서 보고 있는 폴더 id
+let present = { folderId: null, index: 0 };
+let sb = null;
+let renderPending = false;
+
+/* ---------- 유틸 ---------- */
+const app = document.getElementById("app");
+const uid = () => (crypto.randomUUID ? crypto.randomUUID() :
+  "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, c => {
+    const r = Math.random() * 16 | 0; return (c === "x" ? r : (r & 3 | 8)).toString(16);
+  }));
+const bySort = (a, b) => (a.sort_order - b.sort_order) || String(a.created_at).localeCompare(String(b.created_at));
+const folderById = id => state.folders.find(f => f.id === id) || null;
+const childrenOf = pid => state.folders.filter(f => (f.parent_id || null) === (pid || null)).sort(bySort);
+const wordsOf = fid => state.words.filter(w => w.folder_id === fid).sort(bySort);
+const pathTo = id => { const out = []; let f = folderById(id); while (f) { out.unshift(f); f = folderById(f.parent_id); } return out; };
+const nextOrder = list => list.length ? Math.max(...list.map(x => x.sort_order)) + 1 : 0;
+
+function h(tag, attrs, ...kids) {
+  const el = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (v == null || v === false) continue;
+    if (k === "class") el.className = v;
+    else if (k === "html") el.innerHTML = v;
+    else if (k === "value") el.value = v;
+    else if (k.startsWith("on")) el.addEventListener(k.slice(2), v);
+    else el.setAttribute(k, v === true ? "" : v);
+  }
+  for (const c of kids.flat()) {
+    if (c == null || c === false) continue;
+    el.append(c.nodeType ? c : document.createTextNode(String(c)));
+  }
+  return el;
+}
+
+let toastTimer;
+function toast(msg) {
+  document.querySelector(".toast")?.remove();
+  const t = h("div", { class: "toast", role: "status" }, msg);
+  document.body.append(t);
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.remove(), 2600);
+}
+
+const ICON = {
+  folder: `<svg viewBox="0 0 64 52" aria-hidden="true"><path d="M3 8a5 5 0 0 1 5-5h15.5a4 4 0 0 1 2.8 1.2L31 9h25a5 5 0 0 1 5 5v31a5 5 0 0 1-5 5H8a5 5 0 0 1-5-5z" fill="#5fb4ea"/><path d="M3 17a3 3 0 0 1 3-3h52a3 3 0 0 1 3 3v28a5 5 0 0 1-5 5H8a5 5 0 0 1-5-5z" fill="#8fd0f7"/></svg>`,
+  gear: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>`,
+  back: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>`,
+  close: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>`
+};
+
+/* ---------- 데이터 계층 ---------- */
+const chk = r => { if (r.error) throw r.error; return r.data; };
+const now = () => new Date().toISOString();
+
+const db = {
+  async load() {
+    if (mode === "local") return;
+    const [f, w] = await Promise.all([
+      sb.from("folders").select("*"),
+      sb.from("words").select("*")
+    ]);
+    state.folders = chk(f); state.words = chk(w);
+  },
+  async insertFolders(rows) {
+    if (mode === "local") { rows.forEach(r => state.folders.push({ created_at: now(), ...r })); return; }
+    chk(await sb.from("folders").insert(rows));
+  },
+  async updateFolder(id, patch) {
+    if (mode === "local") { Object.assign(folderById(id), patch); return; }
+    chk(await sb.from("folders").update(patch).eq("id", id));
+  },
+  async deleteFolder(id) {
+    if (mode === "local") {
+      const kill = new Set([id]);
+      let grew = true;
+      while (grew) { grew = false; state.folders.forEach(f => { if (kill.has(f.parent_id) && !kill.has(f.id)) { kill.add(f.id); grew = true; } }); }
+      state.folders = state.folders.filter(f => !kill.has(f.id));
+      state.words = state.words.filter(w => !kill.has(w.folder_id));
+      return;
+    }
+    chk(await sb.from("folders").delete().eq("id", id));
+  },
+  async insertWords(rows) {
+    if (mode === "local") { rows.forEach(r => state.words.push({ created_at: now(), ...r })); return; }
+    for (let i = 0; i < rows.length; i += 500) chk(await sb.from("words").insert(rows.slice(i, i + 500)));
+  },
+  async updateWord(id, patch) {
+    if (mode === "local") { Object.assign(state.words.find(w => w.id === id), patch); return; }
+    chk(await sb.from("words").update(patch).eq("id", id));
+  },
+  async deleteWord(id) {
+    if (mode === "local") { state.words = state.words.filter(w => w.id !== id); return; }
+    chk(await sb.from("words").delete().eq("id", id));
+  }
+};
+
+function buildSeedRows() {
+  const tops = [], subs = [], words = [];
+  SEED.forEach((top, i) => {
+    const id = uid();
+    tops.push({ id, parent_id: null, name: top.name, sort_order: i });
+    top.children.forEach((c, j) => {
+      const cid = uid();
+      subs.push({ id: cid, parent_id: id, name: c.name, sort_order: j });
+      c.words.forEach((t, k) => words.push({ id: uid(), folder_id: cid, text: t, sort_order: k }));
+    });
+  });
+  return { tops, subs, words };
+}
+
+async function insertSeed() {
+  const { tops, subs, words } = buildSeedRows();
+  await db.insertFolders(tops);
+  await db.insertFolders(subs);
+  await db.insertWords(words);
+}
+
+async function refresh() {
+  try { await db.load(); } catch (e) { console.error(e); toast("불러오기 실패: " + (e.message || e)); }
+  render();
+}
+
+async function act(fn) {
+  try { await fn(); }
+  catch (e) { console.error(e); toast("저장 실패: " + (e.message || e)); }
+  await refresh();
+}
+
+let refreshTimer;
+function scheduleRefresh() { clearTimeout(refreshTimer); refreshTimer = setTimeout(refresh, 150); }
+
+/* ---------- 렌더 ---------- */
+function isEditing() {
+  const a = document.activeElement;
+  return view === "settings" && a && (a.tagName === "INPUT" || a.tagName === "TEXTAREA");
+}
+
+function render() {
+  if (isEditing()) { renderPending = true; return; }
+  renderPending = false;
+
+  if (homePath && !folderById(homePath)) homePath = null;
+  if (settingsPath && !folderById(settingsPath)) settingsPath = null;
+
+  if (view === "present") return renderPresent();
+  if (view === "settings") return renderSettings();
+  renderHome();
+}
+
+document.addEventListener("focusout", () => {
+  setTimeout(() => { if (renderPending && !isEditing()) render(); }, 0);
+});
+
+function crumbs(pathId, onGo, rootLabel) {
+  const path = pathTo(pathId);
+  const nodes = [h("button", { class: "crumb" + (path.length ? "" : " cur"), onclick: () => path.length && onGo(null) }, rootLabel)];
+  path.forEach((f, i) => {
+    const last = i === path.length - 1;
+    nodes.push(h("span", { class: "sep", "aria-hidden": "true" }, "/"));
+    nodes.push(h("button", { class: "crumb" + (last ? " cur" : ""), onclick: () => !last && onGo(f.id) }, f.name));
+  });
+  return h("nav", { class: "crumbs", "aria-label": "경로" }, nodes);
+}
+
+function renderHome() {
+  const top = h("header", { class: "top" },
+    homePath ? h("button", { class: "icon-btn", "aria-label": "뒤로", html: ICON.back,
+      onclick: () => { homePath = folderById(homePath)?.parent_id || null; render(); } }) : null,
+    crumbs(homePath, id => { homePath = id; render(); }, "홈"),
+    h("button", { class: "icon-btn", "aria-label": "설정", html: ICON.gear,
+      onclick: () => { settingsPath = homePath; view = "settings"; render(); } })
+  );
+
+  let body;
+  const kids = childrenOf(homePath);
+  if (!loaded) body = h("p", { class: "empty" }, "불러오는 중입니다.");
+  else if (!kids.length && !homePath) body = h("p", { class: "empty" }, "폴더가 없습니다. 오른쪽 위 설정에서 기본 제시어를 넣거나 폴더를 추가하세요.");
+  else if (!kids.length) body = h("p", { class: "empty" }, "이 폴더는 비어 있습니다. 설정에서 하위 폴더나 제시어를 추가하세요.");
+  else body = h("main", { class: "grid" }, kids.map(f => {
+    const subN = childrenOf(f.id).length, wN = wordsOf(f.id).length;
+    const meta = subN ? `폴더 ${subN}개` : `제시어 ${wN}개`;
+    return h("button", { class: "tile", onclick: () => openFolder(f.id) },
+      h("span", { html: ICON.folder }),
+      h("span", { class: "name" }, f.name),
+      h("span", { class: "meta" }, meta));
+  }));
+
+  const note = mode === "local" ? h("p", { class: "note" }, "로컬 미리보기 모드입니다. 수정 내용은 저장되지 않습니다.") : null;
+  app.replaceChildren(top, body, note);
+}
+
+function openFolder(id) {
+  if (childrenOf(id).length) { homePath = id; render(); return; }
+  if (!wordsOf(id).length) { toast("제시어가 없습니다. 설정에서 추가하세요."); return; }
+  present = { folderId: id, index: 0 };
+  view = "present";
+  lockScreen();
+  render();
+}
+
+/* ---------- 발표 모드 ---------- */
+function renderPresent() {
+  const f = folderById(present.folderId);
+  const list = f ? wordsOf(f.id) : [];
+  if (!f || !list.length) { closePresent(); return; }
+  present.index = Math.min(Math.max(present.index, 0), list.length - 1);
+
+  const word = h("div", { class: "p-word" }, list[present.index].text);
+  const stage = h("div", { class: "p-stage" }, word);
+  const overlay = h("div", { class: "present", role: "dialog", "aria-label": f.name },
+    h("button", { class: "p-close", "aria-label": "닫기", onclick: closePresent }, "✕ 닫기"),
+    h("div", { class: "p-path" }, pathTo(f.id).map(x => x.name).join(" / ")),
+    stage,
+    h("div", { class: "p-count" }, `${present.index + 1} / ${list.length}`)
+  );
+
+  let sx = null, sy = null;
+  overlay.addEventListener("pointerdown", e => { if (e.target.closest("button")) return; sx = e.clientX; sy = e.clientY; });
+  overlay.addEventListener("pointerup", e => {
+    if (sx == null) return;
+    const dx = e.clientX - sx, dy = e.clientY - sy; sx = null;
+    if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy)) { dx < 0 ? step(1) : step(-1); }
+    else if (Math.abs(dx) < 20 && Math.abs(dy) < 20) { e.clientX < window.innerWidth / 3 ? step(-1) : step(1); }
+  });
+  overlay.addEventListener("pointercancel", () => { sx = null; });
+
+  app.replaceChildren(overlay);
+  fitWord(word, stage);
+  document.fonts?.ready?.then(() => fitWord(word, stage));
+}
+
+function fitWord(el, box) {
+  let lo = 12, hi = Math.floor(Math.min(box.clientHeight * 0.75, box.clientWidth));
+  while (hi - lo > 1) {
+    const mid = (lo + hi) >> 1;
+    el.style.fontSize = mid + "px";
+    if (el.scrollWidth <= el.clientWidth + 1 && el.offsetHeight <= box.clientHeight) lo = mid; else hi = mid;
+  }
+  el.style.fontSize = lo + "px";
+}
+
+function step(d) {
+  const n = wordsOf(present.folderId).length;
+  const next = present.index + d;
+  if (next < 0 || next >= n) return;
+  present.index = next;
+  renderPresent();
+}
+
+function closePresent() {
+  view = "home";
+  unlockScreen();
+  render();
+}
+
+window.addEventListener("resize", () => { if (view === "present") renderPresent(); });
+document.addEventListener("keydown", e => {
+  if (view !== "present") return;
+  if (e.key === "ArrowRight" || e.key === " " || e.key === "PageDown") { e.preventDefault(); step(1); }
+  else if (e.key === "ArrowLeft" || e.key === "PageUp") { e.preventDefault(); step(-1); }
+  else if (e.key === "Escape") closePresent();
+});
+
+let wakeLock = null;
+async function lockScreen() {
+  try { if ("wakeLock" in navigator) wakeLock = await navigator.wakeLock.request("screen"); } catch (e) {}
+}
+function unlockScreen() { try { wakeLock?.release(); } catch (e) {} wakeLock = null; }
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState !== "visible") return;
+  if (view === "present") lockScreen();
+  if (mode === "remote") scheduleRefresh();
+});
+
+/* ---------- 설정 ---------- */
+async function moveItem(list, i, dir, update) {
+  const j = i + dir;
+  if (j < 0 || j >= list.length) return;
+  const order = list.slice();
+  [order[i], order[j]] = [order[j], order[i]];
+  const jobs = [];
+  order.forEach((item, idx) => { if (item.sort_order !== idx) jobs.push(update(item.id, { sort_order: idx })); });
+  await Promise.all(jobs);
+}
+
+function editableInput(value, onSave, label) {
+  const input = h("input", { value, "aria-label": label, enterkeyhint: "done" });
+  input.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); input.blur(); } });
+  input.addEventListener("change", () => {
+    const v = input.value.trim();
+    if (!v) { input.value = value; toast("빈 값은 저장할 수 없습니다."); return; }
+    if (v !== value) act(() => onSave(v));
+  });
+  return input;
+}
+
+function renderSettings() {
+  const fid = settingsPath;
+  const subs = childrenOf(fid);
+  const ws = fid ? wordsOf(fid) : [];
+  const showFolders = !fid || ws.length === 0;
+  const showWords = !!fid && subs.length === 0;
+
+  const connLabel = { local: "로컬 미리보기 (저장 안 됨)", connecting: "연결 중", live: "실시간 동기화 중", err: "연결 끊김" }[conn];
+  const top = h("header", { class: "top" },
+    h("button", { class: "icon-btn", "aria-label": fid ? "상위 폴더" : "설정 닫기", html: fid ? ICON.back : ICON.close,
+      onclick: () => {
+        if (fid) settingsPath = folderById(fid)?.parent_id || null;
+        else view = "home";
+        render();
+      } }),
+    crumbs(fid, id => { settingsPath = id; render(); }, "설정")
+  );
+
+  const parts = [h("div", { class: "conn " + (conn === "live" ? "live" : conn === "err" ? "err" : "") }, "● " + connLabel)];
+
+  if (!fid && state.folders.length === 0 && loaded) {
+    parts.push(h("section", { class: "sec" },
+      h("div", { class: "seed" },
+        h("p", {}, "폴더가 없습니다. 준비된 기본 제시어(04 · 05 · 06 게임용)를 넣을 수 있습니다."),
+        h("button", { class: "btn", onclick: e => { e.currentTarget.disabled = true; act(insertSeed); } }, "기본 제시어 넣기"))));
+  }
+
+  if (showFolders) {
+    const rows = subs.map((f, i) => {
+      const n = childrenOf(f.id).length || wordsOf(f.id).length;
+      return h("div", { class: "row" },
+        editableInput(f.name, v => db.updateFolder(f.id, { name: v }), "폴더 이름"),
+        h("button", { class: "mini open", onclick: () => { settingsPath = f.id; render(); } }, `열기 (${n})`),
+        h("button", { class: "mini", "aria-label": "위로", disabled: i === 0 || null,
+          onclick: () => act(() => moveItem(subs, i, -1, db.updateFolder)) }, "▲"),
+        h("button", { class: "mini", "aria-label": "아래로", disabled: i === subs.length - 1 || null,
+          onclick: () => act(() => moveItem(subs, i, 1, db.updateFolder)) }, "▼"),
+        h("button", { class: "mini del", "aria-label": "폴더 삭제",
+          onclick: () => {
+            if (confirm(`"${f.name}" 폴더와 그 안의 하위 폴더·제시어가 모두 삭제됩니다. 삭제할까요?`))
+              act(() => db.deleteFolder(f.id));
+          } }, "삭제"));
+    });
+    const nameInput = h("input", { placeholder: "새 폴더 이름", "aria-label": "새 폴더 이름", enterkeyhint: "done" });
+    const addFolder = () => {
+      const v = nameInput.value.trim();
+      if (!v) { toast("폴더 이름을 입력하세요."); return; }
+      nameInput.value = ""; nameInput.blur();
+      act(() => db.insertFolders([{ id: uid(), parent_id: fid, name: v, sort_order: nextOrder(subs) }]));
+    };
+    nameInput.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); addFolder(); } });
+    parts.push(h("section", { class: "sec" },
+      h("h2", {}, fid ? `하위 폴더 (${subs.length})` : `폴더 (${subs.length})`),
+      rows,
+      h("div", { class: "add" }, nameInput, h("button", { class: "btn", onclick: addFolder }, "폴더 추가"))));
+  }
+
+  if (showWords) {
+    const rows = ws.map((w, i) => h("div", { class: "row" },
+      h("span", { class: "num" }, i + 1),
+      editableInput(w.text, v => db.updateWord(w.id, { text: v }), `제시어 ${i + 1}`),
+      h("button", { class: "mini", "aria-label": "위로", disabled: i === 0 || null,
+        onclick: () => act(() => moveItem(ws, i, -1, db.updateWord)) }, "▲"),
+      h("button", { class: "mini", "aria-label": "아래로", disabled: i === ws.length - 1 || null,
+        onclick: () => act(() => moveItem(ws, i, 1, db.updateWord)) }, "▼"),
+      h("button", { class: "mini del", "aria-label": "제시어 삭제",
+        onclick: () => { if (confirm(`"${w.text}"을(를) 삭제할까요?`)) act(() => db.deleteWord(w.id)); } }, "삭제")));
+    const ta = h("textarea", { placeholder: "한 줄에 하나씩 입력하세요. 여러 줄을 붙여넣으면 한 번에 추가됩니다.", "aria-label": "제시어 추가" });
+    const addWords = () => {
+      const items = ta.value.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+      if (!items.length) { toast("추가할 제시어를 입력하세요."); return; }
+      ta.value = ""; ta.blur();
+      const base = nextOrder(ws);
+      act(() => db.insertWords(items.map((t, k) => ({ id: uid(), folder_id: fid, text: t, sort_order: base + k }))));
+    };
+    parts.push(h("section", { class: "sec" },
+      h("h2", {}, `제시어 (${ws.length})`),
+      rows,
+      h("div", { class: "add" }, ta, h("button", { class: "btn", onclick: addWords }, "추가"))));
+  }
+
+  if (fid && showFolders && showWords) {
+    parts.push(h("p", { class: "hint" }, "빈 폴더입니다. 하위 폴더를 만들면 폴더 목록으로, 제시어를 넣으면 발표용 폴더로 쓰입니다."));
+  }
+
+  app.replaceChildren(top, h("div", { class: "settings" }, parts));
+}
+
+/* ---------- 시작 ---------- */
+async function init() {
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !window.supabase) {
+    mode = "local"; conn = "local";
+    const { tops, subs, words } = buildSeedRows();
+    const t = now();
+    state.folders = [...tops, ...subs].map(r => ({ created_at: t, ...r }));
+    state.words = words.map(r => ({ created_at: t, ...r }));
+    loaded = true;
+    render();
+    return;
+  }
+  mode = "remote"; conn = "connecting";
+  sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  render();
+  try { await db.load(); }
+  catch (e) { console.error(e); conn = "err"; toast("DB 불러오기 실패: " + (e.message || e)); }
+  loaded = true;
+  render();
+
+  sb.channel("sketchbook")
+    .on("postgres_changes", { event: "*", schema: "public", table: "folders" }, scheduleRefresh)
+    .on("postgres_changes", { event: "*", schema: "public", table: "words" }, scheduleRefresh)
+    .subscribe(status => {
+      conn = status === "SUBSCRIBED" ? "live" : (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") ? "err" : "connecting";
+      if (status === "SUBSCRIBED") scheduleRefresh();
+      else if (view === "settings") render();
+    });
+}
+
+init();
+</script>
+</body>
+</html>
